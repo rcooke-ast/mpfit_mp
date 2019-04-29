@@ -857,7 +857,7 @@ class mpfit:
         self.nfev = 0
         self.damp = damp
         self.dof=0
-        self._fstep = fstep
+        self.fstep = fstep
 
         if fcn==None:
             self.errmsg = "Usage: parms = mpfit('myfunt', ... )"
@@ -1507,10 +1507,10 @@ class mpfit:
         ans = numpy.sqrt(numpy.dot(vec.T, vec))
         return ans
     
-    def funcderiv(self, fcn, fvec, functkw, j, xp, ifree, hj, emab, oneside):
+    def funcderiv(self, fcn, fvec, functkw, j, xp, ifree, hj, oneside):
         pp = xp.copy()
         pp[ifree] += hj
-        [status, fp] = self.call(fcn, xp, functkw, ddpid=j, pp=pp, emab=emab)
+        [status, fp] = self.call(fcn, pp, functkw)
         if status < 0:
             return None
         if oneside:
@@ -1518,15 +1518,15 @@ class mpfit:
             fjac = (fp-fvec)/hj
         else:
             # COMPUTE THE TWO-SIDED DERIVATIVE
-            pp[ifree] -= 2.0*hj # There's a 2.0 here because hj was recently added to pp (see second line of funcderiv)
-            [status, fm] = self.call(fcn, xp, functkw, ddpid=j, pp=pp, emab=emab)
+            pp[ifree] -= 2.0*hj  # There's a 2.0 here because hj was recently added to pp (see second line of funcderiv)
+            [status, fm] = self.call(fcn, pp, functkw)
             if status < 0:
                 return None
             fjac = (fp-fm)/(2.0*hj)
         return [j,fjac]
 
     def fdjac2(self, fcn, x, fvec, step=None, ulimited=None, ulimit=None, dside=None,
-               epsfcn=None, emab=None, autoderivative=1,
+               epsfcn=None, autoderivative=1,
                functkw=None, xall=None, ifree=None, dstep=None):
 
         if self.debug:
@@ -1611,10 +1611,10 @@ class mpfit:
         for j in range(n):
             if numpy.abs(dside[ifree[j]]) <= 1:
                 # COMPUTE THE ONE-SIDED DERIVATIVE
-                async_results.append(pool.apply_async(self.funcderiv, (fcn,fvec,functkw,j,xall,ifree[j],h[j],emab,True)))
+                async_results.append(pool.apply_async(self.funcderiv, (fcn,fvec,functkw,j,xall,ifree[j],h[j],True)))
             else:
                 # COMPUTE THE TWO-SIDED DERIVATIVE
-                async_results.append(pool.apply_async(self.funcderiv, (fcn,fvec,functkw,j,xall,ifree[j],h[j],emab,False)))
+                async_results.append(pool.apply_async(self.funcderiv, (fcn,fvec,functkw,j,xall,ifree[j],h[j],False)))
         pool.close()
         pool.join()
         map(ApplyResult.wait, async_results)
