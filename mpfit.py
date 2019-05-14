@@ -409,7 +409,6 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
 """
 
 import numpy
-import scipy.linalg
 from multiprocessing import Pool as mpPool
 from multiprocessing.pool import ApplyResult
 
