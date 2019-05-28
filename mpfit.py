@@ -1485,14 +1485,17 @@ class mpfit:
     
     # Call user function or procedure, with _EXTRA or not, with
     # derivatives or not.
-    def call(self, fcn, x, functkw, fjac=None):
+    def call(self, fcn, x, functkw, fjac=None, ddpid=-2):
         if self.debug:
             print('Entering call...')
         if self.qanytied:
             x = self.tie(x, self.ptied)
         self.nfev = self.nfev + 1
         if fjac is None:
-            [status, f] = fcn(x, fjac=fjac, **functkw)
+            try:
+                [status, f] = fcn(x, fjac=fjac, ddpid=ddpid, **functkw)
+            except:
+                [status, f] = fcn(x, fjac=fjac, **functkw)
             if self.damp > 0:
                 # Apply the damping if requested.  This replaces the residuals
                 # with their hyperbolic tangent.  Thus residuals larger than
@@ -1500,7 +1503,10 @@ class mpfit:
                 f = numpy.tanh(f/self.damp)
             return [status, f]
         else:
-            return fcn(x, fjac=fjac, **functkw)
+            try:
+                return fcn(x, fjac=fjac, ddpid=ddpid, **functkw)
+            except:
+                return fcn(x, fjac=fjac, **functkw)
 
     def enorm(self, vec):
         ans = numpy.sqrt(numpy.dot(vec.T, vec))
@@ -1509,7 +1515,7 @@ class mpfit:
     def funcderiv(self, fcn, fvec, functkw, j, xp, ifree, hj, oneside):
         pp = xp.copy()
         pp[ifree] += hj
-        [status, fp] = self.call(fcn, pp, functkw)
+        [status, fp] = self.call(fcn, pp, functkw, ddpid=j)
         if status < 0:
             return None
         if oneside:
@@ -1518,11 +1524,11 @@ class mpfit:
         else:
             # COMPUTE THE TWO-SIDED DERIVATIVE
             pp[ifree] -= 2.0*hj  # There's a 2.0 here because hj was recently added to pp (see second line of funcderiv)
-            [status, fm] = self.call(fcn, pp, functkw)
+            [status, fm] = self.call(fcn, pp, functkw, ddpid=j)
             if status < 0:
                 return None
             fjac = (fp-fm)/(2.0*hj)
-        return [j,fjac]
+        return [j, fjac]
 
     def fdjac2(self, fcn, x, fvec, step=None, ulimited=None, ulimit=None, dside=None,
                epsfcn=None, autoderivative=1,
