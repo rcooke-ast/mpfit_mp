@@ -408,7 +408,9 @@ Perform Levenberg-Marquardt least-squares minimization, based on MINPACK-1.
    Converted from Numeric to numpy (Sergey Koposov, July 2008)
 """
 
+import time
 import numpy
+import scipy.linalg
 from multiprocessing import Pool as mpPool
 from multiprocessing.pool import ApplyResult
 
@@ -605,7 +607,7 @@ class mpfit:
                  damp=0., maxiter=200, factor=100., nprint=1,
                  iterfunct='default', iterkw={}, nocovar=0,
                  rescale=0, autoderivative=1, quiet=0, ncpus=1,
-                 diag=None, epsfcn=None, debug=0, fstep=1.0):
+                 diag=None, epsfcn=None, debug=0, fstep=1.0, showtime=False):
         """
   Inputs:
     fcn:
@@ -857,6 +859,8 @@ class mpfit:
         self.damp = damp
         self.dof=0
         self.fstep = fstep
+        self.showtime = showtime
+        self.starttime = time.time()
 
         if fcn==None:
             self.errmsg = "Usage: parms = mpfit('myfunt', ... )"
@@ -1425,7 +1429,13 @@ class mpfit:
 
         # Determine which parameters to print
         nprint = len(x)
-        print("Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof))
+        thistime = (time.time()-self.starttime)/60.0
+        if thistime > 60.0:
+            deltime = "" if not self.showtime else " TIME = {0:.2f} hours".format(thistime/60.0)
+        else:
+            deltime = "" if not self.showtime else " TIME = {0:.2f} mins".format(thistime)
+        print("Iter ", ('%6i' % iter),"   CHI-SQUARE = ",('%.10g' % fnorm)," DOF = ", ('%i' % dof), deltime)
+        numpy.savetxt("params.dat", x)
         for i in range(nprint):
             if (parinfo is not None) and ('parname' in list(parinfo[i].keys())):
                 p = '   ' + parinfo[i]['parname'] + ' = '
@@ -1485,14 +1495,14 @@ class mpfit:
     
     # Call user function or procedure, with _EXTRA or not, with
     # derivatives or not.
-    def call(self, fcn, x, functkw, fjac=None):
+    def call(self, fcn, x, functkw, fjac=None, idx=None):
         if self.debug:
             print('Entering call...')
         if self.qanytied:
             x = self.tie(x, self.ptied)
         self.nfev = self.nfev + 1
         if fjac is None:
-            [status, f] = fcn(x, fjac=fjac, **functkw)
+            [status, f] = fcn(x, fjac=fjac, idx=idx, **functkw)
             if self.damp > 0:
                 # Apply the damping if requested.  This replaces the residuals
                 # with their hyperbolic tangent.  Thus residuals larger than
@@ -1500,7 +1510,7 @@ class mpfit:
                 f = numpy.tanh(f/self.damp)
             return [status, f]
         else:
-            return fcn(x, fjac=fjac, **functkw)
+            return fcn(x, fjac=fjac, idx=idx, **functkw)
 
     def enorm(self, vec):
         ans = numpy.sqrt(numpy.dot(vec.T, vec))
@@ -1509,7 +1519,9 @@ class mpfit:
     def funcderiv(self, fcn, fvec, functkw, j, xp, ifree, hj, oneside):
         pp = xp.copy()
         pp[ifree] += hj
-        [status, fp] = self.call(fcn, pp, functkw)
+        [status, fp] = self.call(fcn, pp, functkw, idx=j)
+        if fp is None: # This is used when the data are not sensitive to the jth parameter
+            return [j, numpy.zeros(fvec.size)]
         if status < 0:
             return None
         if oneside:
@@ -1518,7 +1530,7 @@ class mpfit:
         else:
             # COMPUTE THE TWO-SIDED DERIVATIVE
             pp[ifree] -= 2.0*hj  # There's a 2.0 here because hj was recently added to pp (see second line of funcderiv)
-            [status, fm] = self.call(fcn, pp, functkw)
+            [status, fm] = self.call(fcn, pp, functkw, idx=j)
             if status < 0:
                 return None
             fjac = (fp-fm)/(2.0*hj)
@@ -2284,7 +2296,7 @@ class mpfit:
 
         if self.debug:
             print('Entering calc_covar...')
-        if numpy.rank(rr) != 2:
+        if numpy.ndim(rr) != 2:
             print('ERROR: r must be a two-dimensional matrix')
             return -1
         s = rr.shape
